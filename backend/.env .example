@@ -1,0 +1,14 @@
+DATABASE_URL=sqlite:///./data/moodboard.db
+OPENAI_API_KEY=your-openai-key-here
+
+#try a random key here
+SECRET_KEY=your-secret-key
+
+# Environment
+ENVIRONMENT=development
+
+DEBUG=True
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
+# Disable warnings
+HF_HUB_DISABLE_SYMLINKS_WARNING=1
