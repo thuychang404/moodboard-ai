@@ -1,4 +1,8 @@
+# Delete .example in file's name and you'll good to go
+
 DATABASE_URL=sqlite:///./data/moodboard.db
+
+# OpenAI API (get from https://platform.openai.com/)
 OPENAI_API_KEY=your-openai-key-here
 
 #try a random key here
