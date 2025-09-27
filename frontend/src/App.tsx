@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Mic, Palette, Music, Brain, Download, AlertCircle, CheckCircle, Sparkles } from 'lucide-react';
-import { moodService, MoodAnalysis } from './services/moodService';
+import { Heart, Mic, Palette, Music, Brain, Download, AlertCircle, CheckCircle, Sparkles, LogOut, User as UserIcon, History, BarChart3, Save } from 'lucide-react';
+import { moodService, MoodAnalysis, MoodHistoryEntry } from './services/moodService';
+import { authService, User, AuthState } from './services/authService';
 import { GlassCard } from './components/GlassCard';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { LoadingSpinner } from './components/LoadingSpinner';
+import AuthComponent from './components/AuthComponent';
 import confetti from 'canvas-confetti';
 
 interface MoodEntry {
@@ -44,17 +46,10 @@ const generateAbstractArt = (canvas: HTMLCanvasElement, analysis: MoodAnalysis) 
     const size = Math.random() * 80 + 20;
     
     if (art_style === 'circles') {
-      // Soft circles for positive mood
-      const innerGradient = ctx.createRadialGradient(x, y, 0, x, y, size);
-      innerGradient.addColorStop(0, ctx.fillStyle as string);
-      innerGradient.addColorStop(1, ctx.fillStyle + '00');
-      ctx.fillStyle = innerGradient;
-      
       ctx.beginPath();
       ctx.arc(x, y, size, 0, Math.PI * 2);
       ctx.fill();
     } else if (art_style === 'sharp') {
-      // Angular shapes for intense emotions
       ctx.beginPath();
       ctx.moveTo(x, y);
       for (let j = 0; j < 6; j++) {
@@ -65,7 +60,6 @@ const generateAbstractArt = (canvas: HTMLCanvasElement, analysis: MoodAnalysis) 
       ctx.closePath();
       ctx.fill();
     } else {
-      // Organic shapes for neutral/calm moods
       ctx.beginPath();
       ctx.ellipse(x, y, size, size * (0.4 + Math.random() * 0.4), Math.random() * Math.PI, 0, Math.PI * 2);
       ctx.fill();
@@ -76,16 +70,48 @@ const generateAbstractArt = (canvas: HTMLCanvasElement, analysis: MoodAnalysis) 
 };
 
 const MoodBoardAI: React.FC = () => {
+  // Authentication state
+  const [authState, setAuthState] = useState<AuthState>({
+    isAuthenticated: false,
+    user: null,
+    token: null
+  });
+  const [showAuth, setShowAuth] = useState(false);
+  
+  // Mood analysis state
   const [entry, setEntry] = useState('');
   const [analysis, setAnalysis] = useState<MoodAnalysis | null>(null);
-  const [entries, setEntries] = useState<MoodEntry[]>([]);
+  const [entries, setEntries] = useState<MoodEntry[]>([]); // Temporary storage for non-authenticated users
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [saveToHistory, setSaveToHistory] = useState(false); // Toggle for saving
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Personal features (authenticated only)
+  const [moodHistory, setMoodHistory] = useState<MoodHistoryEntry[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Initialize auth state on component mount
   useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        const currentAuthState = await authService.refreshAuthState();
+        setAuthState(currentAuthState);
+        
+        // If authenticated, load mood history
+        if (currentAuthState.isAuthenticated) {
+          loadMoodHistory();
+        }
+      } catch (error) {
+        console.error('Failed to initialize auth state:', error);
+      }
+    };
+
+    initializeAuth();
+    
+    // Test backend connection
     const testConnection = async () => {
       try {
         await moodService.checkHealth();
@@ -97,6 +123,39 @@ const MoodBoardAI: React.FC = () => {
     testConnection();
   }, []);
 
+  const loadMoodHistory = async () => {
+    try {
+      const history = await moodService.getMoodHistory(10);
+      setMoodHistory(history);
+    } catch (error) {
+      console.error('Failed to load mood history:', error);
+    }
+  };
+
+  const handleLogin = (user: User) => {
+    setAuthState({
+      isAuthenticated: true,
+      user,
+      token: authService.getToken()
+    });
+    loadMoodHistory(); // Load history after login
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      setAuthState({
+        isAuthenticated: false,
+        user: null,
+        token: null
+      });
+      setMoodHistory([]); // Clear history
+      setSaveToHistory(false); // Reset save toggle
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
   const handleAnalyze = async () => {
     if (!entry.trim()) {
       setError('Please enter some text to analyze');
@@ -107,17 +166,24 @@ const MoodBoardAI: React.FC = () => {
     setError(null);
 
     try {
-      const moodAnalysis = await moodService.analyzeMood(entry.trim());
+      // Use the appropriate endpoint based on authentication and save preference
+      const moodAnalysis = await moodService.analyzeMood(entry.trim(), authState.isAuthenticated && saveToHistory);
       setAnalysis(moodAnalysis);
 
-      const newEntry: MoodEntry = {
-        id: Date.now(),
-        text: entry.trim(),
-        analysis: moodAnalysis,
-        timestamp: new Date().toISOString()
-      };
+      // For non-authenticated users or when not saving, store locally
+      if (!authState.isAuthenticated || !saveToHistory) {
+        const newEntry: MoodEntry = {
+          id: Date.now(),
+          text: entry.trim(),
+          analysis: moodAnalysis,
+          timestamp: new Date().toISOString()
+        };
+        setEntries(prev => [newEntry, ...prev.slice(0, 4)]);
+      } else {
+        // If authenticated and saving, reload history
+        loadMoodHistory();
+      }
 
-      setEntries(prev => [newEntry, ...prev.slice(0, 4)]);
       setShowSuccess(true);
 
       // Celebration confetti for positive moods
@@ -161,15 +227,66 @@ const MoodBoardAI: React.FC = () => {
     <div className="min-h-screen relative">
       <AnimatedBackground />
       
+      {/* Authentication Modal */}
+      <AnimatePresence>
+        {showAuth && (
+          <AuthComponent 
+            onLogin={handleLogin}
+            onClose={() => setShowAuth(false)}
+          />
+        )}
+      </AnimatePresence>
+      
       <div className="relative z-10 p-4">
         <div className="max-w-7xl mx-auto">
-          {/* Header */}
+          {/* Header with Auth */}
           <motion.div 
             className="text-center mb-8"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
           >
+            {/* User Menu */}
+            <div className="absolute top-0 right-0 z-20">
+              {authState.isAuthenticated ? (
+                <div className="flex items-center gap-2">
+                  {/* Personal Features Buttons */}
+                  <motion.button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white p-3 rounded-full transition-all duration-300 border border-white/30"
+                    title="Mood History"
+                    whileHover={{ scale: 1.05 }}
+                  >
+                    <History size={18} />
+                  </motion.button>
+
+                  {/* User Info */}
+                  <div className="flex items-center gap-4 bg-white/20 backdrop-blur-md rounded-full px-4 py-2 border border-white/30">
+                    <div className="flex items-center gap-2 text-white">
+                      <UserIcon size={20} />
+                      <span className="font-medium">
+                        {authState.user?.full_name || authState.user?.username}
+                      </span>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-full transition-all duration-300"
+                      title="Logout"
+                    >
+                      <LogOut size={16} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAuth(true)}
+                  className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white px-6 py-3 rounded-full font-semibold transition-all duration-300 border border-white/30"
+                >
+                  Login for History & More
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center justify-center gap-3 mb-6">
               <motion.div
                 animate={{ rotate: [0, 10, -10, 0] }}
@@ -185,6 +302,17 @@ const MoodBoardAI: React.FC = () => {
             <p className="text-xl text-white/90 font-medium">
               Transform your thoughts into beautiful art, insights, and experiences ✨
             </p>
+            
+            {/* Feature highlight */}
+            {!authState.isAuthenticated && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-4 p-3 bg-green-500/20 backdrop-blur-md border border-green-400/30 rounded-xl text-green-100"
+              >
+                <p>🎨 Try mood analysis now! Login to save history and access personal features.</p>
+              </motion.div>
+            )}
           </motion.div>
 
           {/* Success Message */}
@@ -197,7 +325,9 @@ const MoodBoardAI: React.FC = () => {
                 className="mb-6 p-4 bg-green-500/20 backdrop-blur-md border border-green-400/30 rounded-xl flex items-center justify-center gap-2"
               >
                 <CheckCircle className="text-green-300" size={20} />
-                <span className="text-green-100 font-medium">Mood analysis complete! 🎉</span>
+                <span className="text-green-100 font-medium">
+                  Mood analysis complete! {authState.isAuthenticated && saveToHistory ? 'Saved to your history 📊' : '🎉'}
+                </span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -241,21 +371,42 @@ const MoodBoardAI: React.FC = () => {
                     className="w-full h-36 p-4 bg-white/50 border-2 border-white/30 rounded-xl resize-none focus:border-purple-400 focus:outline-none focus:bg-white/70 transition-all duration-300 text-gray-800 placeholder-gray-500"
                   />
                   
-                  <button
-                    onClick={() => setIsRecording(!isRecording)}
-                    className={`absolute bottom-4 right-4 p-3 rounded-full transition-all duration-300 ${
-                      isRecording 
-                        ? 'bg-red-500 text-white animate-pulse shadow-lg' 
-                        : 'bg-white/70 hover:bg-white/90 text-gray-600 hover:text-gray-800'
-                    }`}
-                  >
-                    <Mic size={18} />
-                  </button>
+                  {/* Microphone Button - Only for authenticated users */}
+                  {authState.isAuthenticated && (
+                    <button
+                      onClick={() => setIsRecording(!isRecording)}
+                      className={`absolute bottom-4 right-4 p-3 rounded-full transition-all duration-300 ${
+                        isRecording 
+                          ? 'bg-red-500 text-white animate-pulse shadow-lg' 
+                          : 'bg-white/70 hover:bg-white/90 text-gray-600 hover:text-gray-800'
+                      }`}
+                      title="Voice Input (Premium Feature)"
+                    >
+                      <Mic size={18} />
+                    </button>
+                  )}
                 </div>
+                
+                {/* Save to History Toggle - Only for authenticated users */}
+                {authState.isAuthenticated && (
+                  <div className="flex items-center gap-3 mt-4 p-3 bg-blue-50/80 rounded-xl">
+                    <input
+                      type="checkbox"
+                      id="saveToHistory"
+                      checked={saveToHistory}
+                      onChange={(e) => setSaveToHistory(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="saveToHistory" className="text-blue-800 font-medium cursor-pointer flex items-center gap-2">
+                      <Save size={16} />
+                      Save to my mood history
+                    </label>
+                  </div>
+                )}
                 
                 <motion.button
                   onClick={handleAnalyze}
-                  disabled={!entry.trim() || isAnalyzing}
+                  disabled={isAnalyzing || !entry.trim()}
                   className="w-full mt-6 btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
@@ -354,6 +505,7 @@ const MoodBoardAI: React.FC = () => {
                       <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-blue-800">
                         <Brain className="text-blue-600" size={22} />
                         Personal Insight
+                        {authState.isAuthenticated && <span className="text-sm">for {authState.user?.full_name || authState.user?.username}</span>}
                       </h3>
                       <p className="text-blue-900 leading-relaxed text-lg">{analysis.ai_insight}</p>
                     </GlassCard>
@@ -364,6 +516,73 @@ const MoodBoardAI: React.FC = () => {
             
             {/* Right Column */}
             <div className="space-y-6">
+              {/* Mood History - Only for authenticated users */}
+              <AnimatePresence>
+                {authState.isAuthenticated && showHistory && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.6 }}
+                  >
+                    <GlassCard>
+                      <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-gray-800">
+                        <History className="text-indigo-500" size={22} />
+                        Your Mood History
+                        <span className="text-sm text-gray-500">({moodHistory.length} entries)</span>
+                      </h3>
+                      
+                      {moodHistory.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <History size={48} className="mx-auto mb-4 opacity-50" />
+                          <p>No mood history yet. Start saving your moods to see patterns!</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                          {moodHistory.slice(0, 5).map((historyEntry, idx) => (
+                            <motion.div
+                              key={historyEntry.id}
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: idx * 0.1 }}
+                              className="p-3 bg-white/60 rounded-xl border border-white/30 hover:bg-white/80 transition-all"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-2xl">
+                                    {historyEntry.sentiment === 'positive' ? '😊' : 
+                                     historyEntry.sentiment === 'negative' ? '😔' : '😐'}
+                                  </span>
+                                  <span className="text-sm text-gray-600">
+                                    {new Date(historyEntry.created_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                <div className="flex gap-1">
+                                  {historyEntry.color_palette?.slice(0, 3).map((color, i) => (
+                                    <div
+                                      key={i}
+                                      className="w-3 h-3 rounded-full"
+                                      style={{ backgroundColor: color }}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                              <p className="text-sm text-gray-700 line-clamp-2">
+                                "{historyEntry.text_content?.slice(0, 100)}..."
+                              </p>
+                              <div className="mt-2 flex justify-between text-xs text-gray-500">
+                                <span className="capitalize">{historyEntry.sentiment} • {historyEntry.energy_level} energy</span>
+                                <span>{Math.round((historyEntry.sentiment_confidence || 0) * 100)}% confidence</span>
+                              </div>
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
+                    </GlassCard>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Color Palette */}
               <AnimatePresence>
                 {analysis?.color_palette && (
@@ -463,6 +682,11 @@ const MoodBoardAI: React.FC = () => {
                       <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-gray-800">
                         <Music className="text-green-500" size={22} />
                         Ambient Soundscape
+                        {!authState.isAuthenticated && (
+                          <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">
+                            Login for Audio
+                          </span>
+                        )}
                       </h3>
                       
                       <div className="bg-gradient-to-br from-green-100/80 to-blue-100/80 backdrop-blur-sm rounded-xl p-6 text-center relative overflow-hidden">
@@ -509,11 +733,16 @@ const MoodBoardAI: React.FC = () => {
                           </div>
                           
                           <motion.button 
-                            className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
+                            className={`px-6 py-3 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300 ${
+                              authState.isAuthenticated 
+                                ? 'bg-green-500 hover:bg-green-600 text-white' 
+                                : 'bg-gray-400 cursor-not-allowed text-gray-200'
+                            }`}
+                            whileHover={authState.isAuthenticated ? { scale: 1.05 } : {}}
+                            whileTap={authState.isAuthenticated ? { scale: 0.95 } : {}}
+                            disabled={!authState.isAuthenticated}
                           >
-                            ▶ Play Soundscape (Coming Soon)
+                            {authState.isAuthenticated ? '▶ Play Soundscape (Coming Soon)' : '🔒 Login to Play'}
                           </motion.button>
                         </div>
                       </div>
@@ -524,9 +753,9 @@ const MoodBoardAI: React.FC = () => {
             </div>
           </div>
           
-          {/* Recent Mood History */}
+          {/* Recent Session Entries (for non-authenticated users) */}
           <AnimatePresence>
-            {entries.length > 0 && (
+            {!authState.isAuthenticated && entries.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -536,7 +765,10 @@ const MoodBoardAI: React.FC = () => {
                 <GlassCard>
                   <h3 className="text-xl font-semibold mb-6 flex items-center gap-2 text-gray-800">
                     <Heart className="text-indigo-500" size={22} />
-                    Recent Mood Journey
+                    Current Session Results
+                    <span className="text-sm bg-blue-200 text-blue-800 px-2 py-1 rounded-full">
+                      Not Saved • Login to Keep History
+                    </span>
                   </h3>
                   
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -598,7 +830,7 @@ const MoodBoardAI: React.FC = () => {
             transition={{ delay: 1, duration: 1 }}
           >
             <div className="text-white/80 text-sm bg-white/10 backdrop-blur-sm rounded-full px-6 py-3 inline-block border border-white/20">
-              ✨ Powered by advanced AI models • Try different emotions and see the magic happen!
+              ✨ Powered by advanced AI models • {authState.isAuthenticated ? 'Enjoy your personal mood tracking!' : 'Free mood analysis! Login for history, voice input & more features.'}
             </div>
           </motion.div>
         </div>

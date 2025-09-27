@@ -1,51 +1,78 @@
-# This is the main FastAPI application file
-# Responsibilities:
-# - Create FastAPI app instance
-# - Configure CORS middleware  
-# - Include API routers
-# - Define global exception handlers
-# - Root endpoints (/, /health)
-
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import os
-from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+import uvicorn
 
-# Import API routers
-from app.api import moods
+# Import routers
+from app.api.moods import router as mood_router
+from app.api.auth import router as auth_router
 
-# Load environment variables
-load_dotenv()
+# Import database and config
+from app.core.database import init_db, get_db
+from app.core.config import settings
 
 # Create FastAPI app
 app = FastAPI(
     title="MoodBoard AI API",
-    description="AI-powered mood tracking and visualization API", 
-    version="1.0.0"
+    description="AI-powered mood analysis and creative content generation",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-# Configure CORS for frontend access
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
-# Include API routes
-app.include_router(moods.router, prefix="/api/moods", tags=["Moods"])
+# Include routers
+app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(mood_router, prefix="/api/moods", tags=["Mood Analysis"])
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on startup"""
+    print("🚀 Starting MoodBoard AI API...")
+    await init_db()
+    print("✅ API ready at http://localhost:8000")
 
 @app.get("/")
 async def root():
+    """API root endpoint"""
     return {
-        "message": "🧠 MoodBoard AI API",
-        "status": "running",
-        "docs": "/docs"
+        "message": "Welcome to MoodBoard AI API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health"
     }
 
-@app.get("/health") 
-async def health_check():
-    return {"status": "healthy", "service": "moodboard-ai"}
+@app.get("/health")
+async def health_check(db: Session = Depends(get_db)):
+    """Health check endpoint"""
+    try:
+        db.execute("SELECT 1")
+        db_status = "healthy"
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+    
+    return {
+        "status": "healthy",
+        "database": db_status,
+        "services": {
+            "mood_analysis": "available",
+            "authentication": "available"
+        }
+    }
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )

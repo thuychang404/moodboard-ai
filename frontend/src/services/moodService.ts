@@ -12,6 +12,21 @@ export interface MoodAnalysis {
   ai_insight: string;
 }
 
+export interface MoodHistoryEntry {
+  id: number;
+  text_content: string;
+  sentiment: string | null;
+  sentiment_confidence: number | null;
+  energy_level: string | null;
+  emotions: { [key: string]: number } | null;
+  keywords: string[] | null;
+  color_palette: string[] | null;
+  art_style: string | null;
+  music_mood: string | null;
+  ai_insight: string | null;
+  created_at: string;
+}
+
 class MoodService {
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
@@ -23,13 +38,89 @@ class MoodService {
     return response.json();
   }
 
-  async analyzeMood(text: string): Promise<MoodAnalysis> {
+  // PUBLIC: Analyze mood without authentication (not saved)
+  async analyzeMoodPublic(text: string): Promise<MoodAnalysis> {
     const response = await fetch(`${API_BASE_URL}/api/moods/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
     return this.handleResponse<MoodAnalysis>(response);
+  }
+
+  // AUTHENTICATED: Analyze mood and save to user's history
+  async analyzeMoodAndSave(text: string): Promise<MoodAnalysis> {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/moods/analyze-and-save`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ text }),
+    });
+    return this.handleResponse<MoodAnalysis>(response);
+  }
+
+  // AUTHENTICATED: Get mood history
+  async getMoodHistory(limit: number = 20, skip: number = 0): Promise<MoodHistoryEntry[]> {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/moods/history?limit=${limit}&skip=${skip}`, {
+      headers: { 
+        'Authorization': `Bearer ${token}`
+      },
+    });
+    return this.handleResponse<MoodHistoryEntry[]>(response);
+  }
+
+  // AUTHENTICATED: Get mood statistics
+  async getMoodStats(): Promise<any> {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/moods/stats`, {
+      headers: { 
+        'Authorization': `Bearer ${token}`
+      },
+    });
+    return this.handleResponse<any>(response);
+  }
+
+  // AUTHENTICATED: Delete mood entry
+  async deleteMoodEntry(entryId: number): Promise<void> {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/moods/entry/${entryId}`, {
+      method: 'DELETE',
+      headers: { 
+        'Authorization': `Bearer ${token}`
+      },
+    });
+    await this.handleResponse<any>(response);
+  }
+
+  // Convenience method: Auto-choose public vs authenticated
+  async analyzeMood(text: string, saveToHistory: boolean = false): Promise<MoodAnalysis> {
+    const isAuthenticated = !!localStorage.getItem('auth_token');
+    
+    if (saveToHistory && isAuthenticated) {
+      return this.analyzeMoodAndSave(text);
+    } else {
+      return this.analyzeMoodPublic(text);
+    }
   }
 
   async checkHealth(): Promise<any> {
@@ -48,6 +139,11 @@ class MoodService {
       'neutral-low': '😴'
     };
     return emojiMap[`${sentiment}-${energy_level}` as keyof typeof emojiMap] || '🙂';
+  }
+
+  // Helper to check if user is authenticated
+  isAuthenticated(): boolean {
+    return !!localStorage.getItem('auth_token');
   }
 }
 
