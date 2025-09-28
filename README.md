@@ -14,6 +14,7 @@ Moodboard AI is a full-stack application that analyzes user moods using AI model
 - [Environment Variables](#environment-variables)
 - [Development](#development)
 - [Updating Dependencies](#updating-dependencies)
+- [Version History](#version-history)
 - [License](#license)
 
 ---
@@ -155,6 +156,17 @@ pip freeze > requirements.txt
 npm install <package>
 npm run build   # For production build
 ```
+
+---
+
+## Version History
+
+- **v1.1.0**  
+  Added new feature: users can now log in using their Gmail account. This version also includes integration with Authience services for enhanced authentication and many other features.
+
+- **v1.0.0**  
+  Initial release of the application. This version includes the core features and marks the first official launch.
+
 
 ---
 
