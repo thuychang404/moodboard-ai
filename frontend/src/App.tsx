@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Mic, Palette, Music, Brain, Download, AlertCircle, CheckCircle, Sparkles, LogOut, User as UserIcon, History, BarChart3, Save } from 'lucide-react';
+import { Heart, Mic, Palette, Music, Brain, Download, AlertCircle, CheckCircle, Sparkles, LogOut, User as UserIcon, History, Save, MessageSquare } from 'lucide-react';
 import { moodService, MoodAnalysis, MoodHistoryEntry } from './services/moodService';
 import { authService, User, AuthState } from './services/authService';
 import { GlassCard } from './components/GlassCard';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { LoadingSpinner } from './components/LoadingSpinner';
+import { SpeechInput } from './components/SpeechInput';
 import AuthComponent from './components/AuthComponent';
 import confetti from 'canvas-confetti';
 
@@ -84,7 +85,6 @@ const MoodBoardAI: React.FC = () => {
   const [entries, setEntries] = useState<MoodEntry[]>([]); // Temporary storage for non-authenticated users
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [saveToHistory, setSaveToHistory] = useState(false); // Toggle for saving
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -92,6 +92,10 @@ const MoodBoardAI: React.FC = () => {
   // Personal features (authenticated only)
   const [moodHistory, setMoodHistory] = useState<MoodHistoryEntry[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+
+  // Speech input state
+  const [speechTranscript, setSpeechTranscript] = useState('');
+  const [isUsingSpeech, setIsUsingSpeech] = useState(false);
 
   // Initialize auth state on component mount
   useEffect(() => {
@@ -122,6 +126,15 @@ const MoodBoardAI: React.FC = () => {
     };
     testConnection();
   }, []);
+
+  // Handle speech transcript changes
+  const handleSpeechTranscript = (transcript: string) => {
+    setSpeechTranscript(transcript);
+    if (transcript.trim()) {
+      setEntry(transcript.trim());
+      setIsUsingSpeech(true);
+    }
+  };
 
   const loadMoodHistory = async () => {
     try {
@@ -158,7 +171,7 @@ const MoodBoardAI: React.FC = () => {
 
   const handleAnalyze = async () => {
     if (!entry.trim()) {
-      setError('Please enter some text to analyze');
+      setError('Please enter some text to analyze or use voice input');
       return;
     }
 
@@ -205,6 +218,10 @@ const MoodBoardAI: React.FC = () => {
 
       // Hide success message
       setTimeout(() => setShowSuccess(false), 3000);
+
+      // Reset speech state
+      setIsUsingSpeech(false);
+      setSpeechTranscript('');
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to analyze mood');
@@ -310,7 +327,7 @@ const MoodBoardAI: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 className="mt-4 p-3 bg-green-500/20 backdrop-blur-md border border-green-400/30 rounded-xl text-green-100"
               >
-                <p>🎨 Try mood analysis now! Login to save history and access personal features.</p>
+                <p>🎨 Try mood analysis now! Login to save history and access voice features.</p>
               </motion.div>
             )}
           </motion.div>
@@ -326,7 +343,7 @@ const MoodBoardAI: React.FC = () => {
               >
                 <CheckCircle className="text-green-300" size={20} />
                 <span className="text-green-100 font-medium">
-                  Mood analysis complete! {authState.isAuthenticated && saveToHistory ? 'Saved to your history 📊' : '🎉'}
+                  Mood analysis complete! {isUsingSpeech ? '🎤 Voice input processed!' : ''} {authState.isAuthenticated && saveToHistory ? 'Saved to your history 📊' : '🎉'}
                 </span>
               </motion.div>
             )}
@@ -361,31 +378,48 @@ const MoodBoardAI: React.FC = () => {
                 <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2 text-gray-800">
                   <Heart className="text-red-500" size={24} />
                   How are you feeling today?
+                  {speechTranscript && (
+                    <span className="text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded-full flex items-center gap-1">
+                      <Mic size={12} />
+                      Voice Active
+                    </span>
+                  )}
                 </h2>
                 
                 <div className="relative">
                   <textarea
                     value={entry}
-                    onChange={(e) => setEntry(e.target.value)}
-                    placeholder="Share your thoughts and feelings... Try: 'I'm excited about my new project but also feeling a bit nervous about the challenges ahead.'"
-                    className="w-full h-36 p-4 bg-white/50 border-2 border-white/30 rounded-xl resize-none focus:border-purple-400 focus:outline-none focus:bg-white/70 transition-all duration-300 text-gray-800 placeholder-gray-500"
+                    onChange={(e) => {
+                      setEntry(e.target.value);
+                      setIsUsingSpeech(false); // Reset speech mode when typing
+                    }}
+                    placeholder="Share your thoughts and feelings... Try: 'I'm excited about my new project but also feeling a bit nervous about the challenges ahead.' Or use the microphone button!"
+                    className="w-full h-36 p-4 bg-white/50 border-2 border-white/30 rounded-xl resize-none focus:border-purple-400 focus:outline-none focus:bg-white/70 transition-all duration-300 text-gray-800 placeholder-gray-500 pr-20"
                   />
                   
-                  {/* Microphone Button - Only for authenticated users */}
-                  {authState.isAuthenticated && (
-                    <button
-                      onClick={() => setIsRecording(!isRecording)}
-                      className={`absolute bottom-4 right-4 p-3 rounded-full transition-all duration-300 ${
-                        isRecording 
-                          ? 'bg-red-500 text-white animate-pulse shadow-lg' 
-                          : 'bg-white/70 hover:bg-white/90 text-gray-600 hover:text-gray-800'
-                      }`}
-                      title="Voice Input (Premium Feature)"
-                    >
-                      <Mic size={18} />
-                    </button>
-                  )}
+                  {/* Speech Input Component */}
+                  <div className="absolute bottom-4 right-4">
+                    <SpeechInput
+                      onTranscriptChange={handleSpeechTranscript}
+                      isDisabled={isAnalyzing}
+                    />
+                  </div>
                 </div>
+
+                {/* Speech feedback */}
+                {isUsingSpeech && speechTranscript && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mt-3 p-3 bg-blue-50/80 rounded-xl border border-blue-200"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <MessageSquare size={16} className="text-blue-600" />
+                      <span className="text-blue-800 font-medium text-sm">Voice transcript captured:</span>
+                    </div>
+                    <p className="text-blue-700 text-sm italic">"{speechTranscript}"</p>
+                  </motion.div>
+                )}
                 
                 {/* Save to History Toggle - Only for authenticated users */}
                 {authState.isAuthenticated && (
@@ -419,7 +453,7 @@ const MoodBoardAI: React.FC = () => {
                   ) : (
                     <>
                       <Sparkles size={20} />
-                      Generate MoodBoard
+                      Generate MoodBoard {isUsingSpeech && '🎤'}
                     </>
                   )}
                 </motion.button>
@@ -830,7 +864,7 @@ const MoodBoardAI: React.FC = () => {
             transition={{ delay: 1, duration: 1 }}
           >
             <div className="text-white/80 text-sm bg-white/10 backdrop-blur-sm rounded-full px-6 py-3 inline-block border border-white/20">
-              ✨ Powered by advanced AI models • {authState.isAuthenticated ? 'Enjoy your personal mood tracking!' : 'Free mood analysis! Login for history, voice input & more features.'}
+              ✨ Powered by advanced AI models • {authState.isAuthenticated ? 'Enjoy your personal mood tracking with voice input! 🎤' : 'Free mood analysis! Login for history, voice input & more features.'}
             </div>
           </motion.div>
         </div>
