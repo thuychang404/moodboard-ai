@@ -10,6 +10,25 @@ export interface MoodAnalysis {
   art_style: 'circles' | 'sharp' | 'organic';
   music_mood: 'uplifting' | 'soothing' | 'balanced';
   ai_insight: string;
+    // ADD THESE LINES:
+  playlist?: {
+    playlist_name: string;
+    mood_tags: string[];
+    total_tracks: number;
+    tracks: Array<{
+      id: string;
+      name: string;
+      artist: string;
+      album?: string;
+      duration: number;
+      audio_url: string;
+      image_url?: string;
+      jamendo_url: string;
+      license?: string;
+    }>;
+    sentiment?: string;
+    energy?: string;
+  };
 }
 
 export interface MoodHistoryEntry {
@@ -49,7 +68,8 @@ class MoodService {
   }
 
   // AUTHENTICATED: Analyze mood and save to user's history
-  async analyzeMoodAndSave(text: string): Promise<MoodAnalysis> {
+  // AUTHENTICATED: Analyze mood and save to user's history
+  async analyzeMoodAndSave(text: string, includeMusic: boolean = false): Promise<MoodAnalysis> {  // ADD includeMusic parameter
     const token = localStorage.getItem('auth_token');
     if (!token) {
       throw new Error('Authentication required');
@@ -61,7 +81,7 @@ class MoodService {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, include_music: includeMusic }),  // ADD include_music to body
     });
     return this.handleResponse<MoodAnalysis>(response);
   }
@@ -113,14 +133,29 @@ class MoodService {
   }
 
   // Convenience method: Auto-choose public vs authenticated
-  async analyzeMood(text: string, saveToHistory: boolean = false): Promise<MoodAnalysis> {
+  async analyzeMood(text: string, saveToHistory: boolean = false, includeMusic: boolean = false): Promise<MoodAnalysis> {
     const isAuthenticated = !!localStorage.getItem('auth_token');
     
-    if (saveToHistory && isAuthenticated) {
-      return this.analyzeMoodAndSave(text);
+    if ((saveToHistory || includeMusic) && isAuthenticated) {
+      return this.analyzeMoodAndSave(text, includeMusic);  // PASS includeMusic
     } else {
       return this.analyzeMoodPublic(text);
     }
+  }
+
+  // AUTHENTICATED: Get playlist for a mood entry
+  async getMoodPlaylist(entryId: number): Promise<any> {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/moods/playlist/${entryId}`, {
+      headers: { 
+        'Authorization': `Bearer ${token}`
+      },
+    });
+    return this.handleResponse<any>(response);
   }
 
   async checkHealth(): Promise<any> {

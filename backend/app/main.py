@@ -15,7 +15,7 @@ from app.core.config import settings
 app = FastAPI(
     title="MoodBoard AI API",
     description="AI-powered mood analysis and creative content generation",
-    version="1.0.0",
+    version="1.3.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )

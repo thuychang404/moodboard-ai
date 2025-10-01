@@ -8,11 +8,13 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.mood_entry import MoodEntry
 from app.api.auth import get_current_active_user
+from app.services.jamendo_service import jamendo_service  # ADD THIS LINE
 
 router = APIRouter()
 
 class MoodAnalysisRequest(BaseModel):
     text: str
+    include_music: bool = False  # ADD THIS LINE
 
 class MoodAnalysisResponse(BaseModel):
     sentiment: str
@@ -24,6 +26,7 @@ class MoodAnalysisResponse(BaseModel):
     art_style: str
     music_mood: str
     ai_insight: str
+    playlist: Optional[Dict[str, Any]] = None  # ADD THIS LINE
 
 class MoodEntryResponse(BaseModel):
     id: int
@@ -76,6 +79,16 @@ async def analyze_and_save_mood(
         
         # Perform mood analysis
         analysis = mood_analyzer.analyze_full_mood(request.text.strip())
+
+        # ADD THESE LINES HERE (before saving to database):
+        # 🎵 Generate music playlist if requested (authenticated users only)
+        playlist = None
+        if request.include_music:
+            print(f"🎵 Generating personalized playlist for user {current_user.username}...")
+            playlist = jamendo_service.get_mood_playlist(analysis, limit=10)
+            print(f"🎵 Playlist result: {playlist.get('total_tracks', 0) if playlist else 'None'} tracks")  # ADD THIS
+            print(f"🎵 Playlist object: {playlist is not None}")  # ADD THIS        
+        # END OF NEW LINES
         
         # Save mood entry to database
         mood_entry = MoodEntry(
@@ -97,8 +110,9 @@ async def analyze_and_save_mood(
         db.refresh(mood_entry)
         
         print(f"✅ Mood entry saved for user {current_user.username} (ID: {mood_entry.id})")
-        
-        return MoodAnalysisResponse(**analysis)
+        print(f"🎵 Returning playlist with response: {playlist is not None}")  # ADD THIS
+
+        return MoodAnalysisResponse(**analysis, playlist=playlist)  # RETURN PLAYLIST HERE IF GENERATED
     
     except Exception as e:
         print(f"Error in authenticated mood analysis: {e}")
@@ -216,6 +230,45 @@ async def delete_mood_entry(
         print(f"Error deleting mood entry: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to delete mood entry")
+
+# ADD THIS ENTIRE NEW ENDPOINT:
+@router.get("/playlist/{entry_id}")
+async def get_mood_playlist(
+    entry_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    AUTHENTICATED: Get music playlist for a specific mood entry
+    """
+    try:
+        # Get the mood entry
+        entry = db.query(MoodEntry)\
+            .filter(MoodEntry.id == entry_id, MoodEntry.user_id == current_user.id)\
+            .first()
+        
+        if not entry:
+            raise HTTPException(status_code=404, detail="Mood entry not found")
+        
+        # Reconstruct mood analysis from stored data
+        mood_analysis = {
+            "sentiment": entry.sentiment,
+            "energy_level": entry.energy_level,
+            "emotions": entry.emotions or {},
+            "color_palette": entry.color_palette or [],
+            "music_mood": entry.music_mood
+        }
+        
+        # Generate playlist
+        playlist = jamendo_service.get_mood_playlist(mood_analysis, limit=10)
+        
+        return playlist
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching mood playlist: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch music playlist")
 
 # Keep existing test and health endpoints
 @router.get("/test")

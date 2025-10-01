@@ -7,6 +7,7 @@ import { GlassCard } from './components/GlassCard';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { SpeechInput } from './components/SpeechInput';
+import { MusicPlayer, Playlist } from './components/MusicPlayer';  // ADD THIS LINE
 import AuthComponent from './components/AuthComponent';
 import confetti from 'canvas-confetti';
 
@@ -87,6 +88,7 @@ const MoodBoardAI: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [saveToHistory, setSaveToHistory] = useState(false); // Toggle for saving
+  const [includeMusic, setIncludeMusic] = useState(false); // ADD THIS LINE
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Personal features (authenticated only)
@@ -170,6 +172,13 @@ const MoodBoardAI: React.FC = () => {
   };
 
   const handleAnalyze = async () => {
+    console.log('🔍 DEBUG:', {
+      isAuthenticated: authState.isAuthenticated,
+      saveToHistory,
+      includeMusic,
+      willCallWithMusic: authState.isAuthenticated && includeMusic
+    });
+
     if (!entry.trim()) {
       setError('Please enter some text to analyze or use voice input');
       return;
@@ -180,7 +189,17 @@ const MoodBoardAI: React.FC = () => {
 
     try {
       // Use the appropriate endpoint based on authentication and save preference
-      const moodAnalysis = await moodService.analyzeMood(entry.trim(), authState.isAuthenticated && saveToHistory);
+      const moodAnalysis = await moodService.analyzeMood(
+        entry.trim(), 
+        authState.isAuthenticated && saveToHistory,
+        authState.isAuthenticated && includeMusic  // This line MUST be here
+      );
+
+        // ADD THESE DEBUG LINES:
+      console.log('🎵 Received analysis:', moodAnalysis);
+      console.log('🎵 Has playlist?', !!moodAnalysis.playlist);
+      console.log('🎵 Playlist tracks:', moodAnalysis.playlist?.tracks?.length || 0);
+
       setAnalysis(moodAnalysis);
 
       // For non-authenticated users or when not saving, store locally
@@ -422,19 +441,36 @@ const MoodBoardAI: React.FC = () => {
                 )}
                 
                 {/* Save to History Toggle - Only for authenticated users */}
+                {/* Save to History Toggle - Only for authenticated users */}
                 {authState.isAuthenticated && (
-                  <div className="flex items-center gap-3 mt-4 p-3 bg-blue-50/80 rounded-xl">
-                    <input
-                      type="checkbox"
-                      id="saveToHistory"
-                      checked={saveToHistory}
-                      onChange={(e) => setSaveToHistory(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                    />
-                    <label htmlFor="saveToHistory" className="text-blue-800 font-medium cursor-pointer flex items-center gap-2">
-                      <Save size={16} />
-                      Save to my mood history
-                    </label>
+                  <div className="space-y-3 mt-4">
+                    <div className="flex items-center gap-3 p-3 bg-blue-50/80 rounded-xl">
+                      <input
+                        type="checkbox"
+                        id="saveToHistory"
+                        checked={saveToHistory}
+                        onChange={(e) => setSaveToHistory(e.target.checked)}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                      />
+                      <label htmlFor="saveToHistory" className="text-blue-800 font-medium cursor-pointer flex items-center gap-2">
+                        <Save size={16} />
+                        Save to my mood history
+                      </label>
+                    </div>
+
+                    <div className="flex items-center gap-3 p-3 bg-purple-50/80 rounded-xl">
+                      <input
+                        type="checkbox"
+                        id="includeMusic"
+                        checked={includeMusic}
+                        onChange={(e) => setIncludeMusic(e.target.checked)}
+                        className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                      />
+                      <label htmlFor="includeMusic" className="text-purple-800 font-medium cursor-pointer flex items-center gap-2">
+                        <Music size={16} />
+                        Generate personalized music playlist 🎵
+                      </label>
+                    </div>
                   </div>
                 )}
                 
@@ -706,7 +742,29 @@ const MoodBoardAI: React.FC = () => {
               
               {/* Music Mood Visualization */}
               <AnimatePresence>
-                {analysis && (
+                {analysis && analysis.playlist && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.4 }}
+                  >
+                    <GlassCard>
+                      <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-gray-800">
+                        <Music className="text-green-500" size={22} />
+                        Your Mood Playlist
+                        <span className="text-xs bg-green-200 text-green-800 px-2 py-1 rounded-full">
+                          {analysis.playlist.total_tracks} Tracks
+                        </span>
+                      </h3>
+                      
+                      <MusicPlayer 
+                        playlist={analysis.playlist as Playlist} 
+                      />
+                    </GlassCard>
+                  </motion.div>
+                )}
+                
+                {analysis && !analysis.playlist && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -718,7 +776,7 @@ const MoodBoardAI: React.FC = () => {
                         Ambient Soundscape
                         {!authState.isAuthenticated && (
                           <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">
-                            Login for Audio
+                            Login for Playlists
                           </span>
                         )}
                       </h3>
@@ -766,18 +824,20 @@ const MoodBoardAI: React.FC = () => {
                             AI-curated soundscape: <strong className="text-green-700">{analysis.music_mood}</strong>
                           </div>
                           
-                          <motion.button 
-                            className={`px-6 py-3 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300 ${
-                              authState.isAuthenticated 
-                                ? 'bg-green-500 hover:bg-green-600 text-white' 
-                                : 'bg-gray-400 cursor-not-allowed text-gray-200'
-                            }`}
-                            whileHover={authState.isAuthenticated ? { scale: 1.05 } : {}}
-                            whileTap={authState.isAuthenticated ? { scale: 0.95 } : {}}
-                            disabled={!authState.isAuthenticated}
-                          >
-                            {authState.isAuthenticated ? '▶ Play Soundscape (Coming Soon)' : '🔒 Login to Play'}
-                          </motion.button>
+                          {authState.isAuthenticated ? (
+                            <div className="text-sm text-gray-600 bg-white/50 rounded-lg p-3">
+                              💡 Tip: Check "Generate personalized music playlist" before analyzing to get your custom playlist!
+                            </div>
+                          ) : (
+                            <motion.button 
+                              onClick={() => setShowAuth(true)}
+                              className="px-6 py-3 rounded-full font-semibold shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 text-white"
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                            >
+                              🔓 Login to Unlock Music Playlists
+                            </motion.button>
+                          )}
                         </div>
                       </div>
                     </GlassCard>
@@ -864,7 +924,7 @@ const MoodBoardAI: React.FC = () => {
             transition={{ delay: 1, duration: 1 }}
           >
             <div className="text-white/80 text-sm bg-white/10 backdrop-blur-sm rounded-full px-6 py-3 inline-block border border-white/20">
-              ✨ Powered by advanced AI models • {authState.isAuthenticated ? 'Enjoy your personal mood tracking with voice input! 🎤' : 'Free mood analysis! Login for history, voice input & more features.'}
+              ✨ Powered by advanced AI models • {authState.isAuthenticated ? 'Enjoy personalized mood tracking with voice input & music playlists! 🎵' : 'Free mood analysis! Login for history, voice input, music playlists & more.'}
             </div>
           </motion.div>
         </div>
