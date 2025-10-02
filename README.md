@@ -11,7 +11,6 @@ Moodboard AI is a full-stack application that analyzes user moods using AI model
 - [Getting Started](#getting-started)
   - [Backend Setup](#backend-setup)
   - [Frontend Setup](#frontend-setup)
-- [Environment Variables](#environment-variables)
 - [Development](#development)
 - [Updating Dependencies](#updating-dependencies)
 - [Version History](#version-history)
@@ -117,25 +116,6 @@ moodboard-ai/
 
 ---
 
-## Environment Variables
-
-### Backend (`backend/.env`)
-Copy from `.env.example` and fill in:
-```
-DATABASE_URL=sqlite:///./data/moodboard.db
-OPENAI_API_KEY=your-openai-key-here
-SECRET_KEY=your-secret-key
-ENVIRONMENT=development
-DEBUG=True
-ALLOWED_ORIGINS=http://localhost:3000
-```
-
-### Frontend (`frontend/.env`)
-Add any frontend secrets or API URLs as needed.  
-**Do not commit this file.**
-
----
-
 ## Development
 
 - **Backend:** Python, FastAPI, Huggingface, OpenAI, JWT
@@ -160,6 +140,16 @@ npm run build   # For production build
 ---
 
 ## Version History
+
+- **v1.3.1**
+  - Fix issue "Playlist Position": In front end, when click Show playlist, a list of songs will apear below the main card (which is not supposed to be there). Fixed: the correct position is under the Show playlist button.
+  - Fix issue "useEffect warning": In front end, when run "npm start", warnings show up. Turn out useEffect missed dependencies: isMuted, volume, isPlaying. Fixed: add isMuted, volume, isPlaying to useEffect. 
+
+- **v1.3.0**
+  Added new feature: now user will get a mood-based playlist whenever they generate a moodboard. Logged-in users only.
+
+- **v1.2.0**
+  Added new feature: users who have already logged in can now use voice-to-text feature.
 
 - **v1.1.0**  
   Added new feature: users can now log in using their Gmail account. This version also includes integration with Authience services for enhanced authentication and many other features.
