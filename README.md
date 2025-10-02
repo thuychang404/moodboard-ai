@@ -66,23 +66,27 @@ moodboard-ai/
 2. **Create and activate a virtual environment (Windows):**
    ```sh
    python -m venv venv
-   venv\Scripts\activate
+   For Windows developers: venv\Scripts\activate.bat
    ```
-
-3. **Install dependencies:**
+   Now, your terminal/command prompt screen should look like this:
+   ```sh
+   (venv) F:\what-ever-this-path-is\moodboard-ai\backend>
+   ```
+   
+4. **Install dependencies:**
    ```sh
    pip install -r requirements.txt
    ```
 
-4. **Configure environment variables:**
-   - Copy `.env.example` to `.env` and fill in your secrets.
+5. **Configure environment variables:**
+   - Copy `.env.example` to `.env` and fill in `OPENAI_API_KEY`, `SECRET_KEY`, `JAMENDO_CLIENT_ID`.
 
-5. **Run the backend server:**
+6. **Run the backend server:**
    ```sh
    uvicorn app.main:app --reload --port 8000
    ```
 
-6. **Verify backend:**
+7. **Verify backend:**
    - Visit [http://localhost:8000/docs](http://localhost:8000/docs) for API docs.
    - Console should show:
      - ✅ "AI models loaded successfully"
@@ -103,7 +107,7 @@ moodboard-ai/
    ```
 
 3. **Configure environment variables (if needed):**
-   - Create a `.env` file for frontend secrets (do not commit this file).
+   - Create a `.env` file for frontend secrets.
 
 4. **Start the frontend:**
    ```sh
