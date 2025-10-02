@@ -60,7 +60,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ playlist, onClose }) =
         });
       }
     }
-  }, [currentTrackIndex, currentTrack]);
+  }, [currentTrackIndex, currentTrack, isMuted, volume, isPlaying]);  // ADD missing dependencies
 
   // Update audio volume
   useEffect(() => {
@@ -179,7 +179,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ playlist, onClose }) =
               <p className="text-purple-200 text-sm">{playlist.total_tracks} tracks</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 relative">  {/* ADD relative HERE */}
             <button
               onClick={() => setShowPlaylist(!showPlaylist)}
               className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-white"
@@ -196,6 +196,116 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ playlist, onClose }) =
                 <X size={20} />
               </button>
             )}
+            
+            {/* MOVE PLAYLIST OVERLAY HERE - Right after the buttons */}
+            <AnimatePresence>
+              {showPlaylist && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="absolute top-full right-0 mt-2 w-96 max-w-[90vw] bg-gradient-to-br from-purple-900/98 to-pink-900/98 backdrop-blur-md rounded-2xl shadow-2xl border border-white/20 max-h-96 overflow-y-auto z-50"
+                >
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-4 sticky top-0 bg-purple-900/95 -mx-4 px-4 py-2 backdrop-blur-md">
+                      <h4 className="text-white font-bold">Playlist</h4>
+                      <button
+                        onClick={() => setShowPlaylist(false)}
+                        className="text-purple-200 hover:text-white"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {playlist.tracks.map((track, index) => (
+                        <motion.button
+                          key={track.id}
+                          onClick={() => selectTrack(index)}
+                          className={`w-full p-3 rounded-lg transition-all text-left ${
+                            index === currentTrackIndex
+                              ? 'bg-purple-500/30 border border-purple-400/50'
+                              : 'bg-white/5 hover:bg-white/10 border border-transparent'
+                          }`}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex-shrink-0 w-8 text-center">
+                              {index === currentTrackIndex && isPlaying ? (
+                                <div className="flex gap-1 justify-center items-center">
+                                  <motion.div
+                                    className="w-1 h-3 bg-purple-300 rounded"
+                                    animate={{ height: ['12px', '6px', '12px'] }}
+                                    transition={{ duration: 0.6, repeat: Infinity }}
+                                  />
+                                  <motion.div
+                                    className="w-1 h-3 bg-purple-300 rounded"
+                                    animate={{ height: ['6px', '12px', '6px'] }}
+                                    transition={{ duration: 0.6, repeat: Infinity }}
+                                  />
+                                  <motion.div
+                                    className="w-1 h-3 bg-purple-300 rounded"
+                                    animate={{ height: ['12px', '6px', '12px'] }}
+                                    transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-purple-200 text-sm">{index + 1}</span>
+                              )}
+                            </div>
+
+                            {track.image_url ? (
+                              <img
+                                src={track.image_url}
+                                alt={track.name}
+                                className="w-10 h-10 rounded object-cover"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded bg-gradient-to-br from-purple-500/50 to-pink-500/50 flex items-center justify-center">
+                                <Music size={16} className="text-white" />
+                              </div>
+                            )}
+
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm font-medium truncate">
+                                {track.name}
+                              </p>
+                              <p className="text-purple-200 text-xs truncate">
+                                {track.artist}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span className="text-purple-300 text-xs">
+                                {formatTime(track.duration)}
+                              </span>
+                              
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleLike(track.id);
+                                }}
+                                className={`p-1 rounded cursor-pointer ${
+                                  likedTracks.has(track.id)
+                                    ? 'text-pink-400'
+                                    : 'text-purple-300 hover:text-pink-400'
+                                }`}
+                              >
+                                <Heart 
+                                  size={14} 
+                                  fill={likedTracks.has(track.id) ? 'currentColor' : 'none'} 
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 
@@ -357,116 +467,6 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ playlist, onClose }) =
           </div>
         )}
       </motion.div>
-
-      {/* Playlist Overlay */}
-      <AnimatePresence>
-        {showPlaylist && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="absolute top-full left-0 right-0 mt-2 bg-gradient-to-br from-purple-900/98 to-pink-900/98 backdrop-blur-md rounded-2xl shadow-2xl border border-white/20 max-h-96 overflow-y-auto z-50"
-          >
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-4 sticky top-0 bg-purple-900/95 -mx-4 px-4 py-2 backdrop-blur-md">
-                <h4 className="text-white font-bold">Playlist</h4>
-                <button
-                  onClick={() => setShowPlaylist(false)}
-                  className="text-purple-200 hover:text-white"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {playlist.tracks.map((track, index) => (
-                  <motion.button
-                    key={track.id}
-                    onClick={() => selectTrack(index)}
-                    className={`w-full p-3 rounded-lg transition-all text-left ${
-                      index === currentTrackIndex
-                        ? 'bg-purple-500/30 border border-purple-400/50'
-                        : 'bg-white/5 hover:bg-white/10 border border-transparent'
-                    }`}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0 w-8 text-center">
-                        {index === currentTrackIndex && isPlaying ? (
-                          <div className="flex gap-1 justify-center items-center">
-                            <motion.div
-                              className="w-1 h-3 bg-purple-300 rounded"
-                              animate={{ height: ['12px', '6px', '12px'] }}
-                              transition={{ duration: 0.6, repeat: Infinity }}
-                            />
-                            <motion.div
-                              className="w-1 h-3 bg-purple-300 rounded"
-                              animate={{ height: ['6px', '12px', '6px'] }}
-                              transition={{ duration: 0.6, repeat: Infinity }}
-                            />
-                            <motion.div
-                              className="w-1 h-3 bg-purple-300 rounded"
-                              animate={{ height: ['12px', '6px', '12px'] }}
-                              transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
-                            />
-                          </div>
-                        ) : (
-                          <span className="text-purple-200 text-sm">{index + 1}</span>
-                        )}
-                      </div>
-
-                      {track.image_url ? (
-                        <img
-                          src={track.image_url}
-                          alt={track.name}
-                          className="w-10 h-10 rounded object-cover"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded bg-gradient-to-br from-purple-500/50 to-pink-500/50 flex items-center justify-center">
-                          <Music size={16} className="text-white" />
-                        </div>
-                      )}
-
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate">
-                          {track.name}
-                        </p>
-                        <p className="text-purple-200 text-xs truncate">
-                          {track.artist}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-purple-300 text-xs">
-                          {formatTime(track.duration)}
-                        </span>
-                        
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleLike(track.id);
-                          }}
-                          className={`p-1 rounded cursor-pointer ${
-                            likedTracks.has(track.id)
-                              ? 'text-pink-400'
-                              : 'text-purple-300 hover:text-pink-400'
-                          }`}
-                        >
-                          <Heart 
-                            size={14} 
-                            fill={likedTracks.has(track.id) ? 'currentColor' : 'none'} 
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </motion.button>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <style>{`
         .slider::-webkit-slider-thumb {
