@@ -143,7 +143,7 @@ npm run build   # For production build
 
 - **v1.3.1**
   - Fix issue "Playlist Position": In front end, when click Show playlist, a list of songs will apear below the main card (which is not supposed to be there). Fixed: the correct position is under the Show playlist button.
-  - Fix issue "useEffect warning": In front end, when run "npm start", warnings show up. Turn out useEffect missed dependencies: isMuted, volume, isPlaying. Fixed: add isMuted, volume, isPlaying to useEffect. 
+  - Fix issue "`useEffect` warning": In front end, when run `npm start`, warnings show up. Turn out `useEffect` missed dependencies: `isMuted`, `volume`, `isPlaying`. Fixed: add `isMuted`, `volume`, `isPlaying` to `useEffect`. 
 
 - **v1.3.0**
   Added new feature: now user will get a mood-based playlist whenever they generate a moodboard. Logged-in users only.
