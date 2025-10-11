@@ -99,6 +99,10 @@ const MoodBoardAI: React.FC = () => {
   const [speechTranscript, setSpeechTranscript] = useState('');
   const [isUsingSpeech, setIsUsingSpeech] = useState(false);
 
+  const [weeklyMoodSummary, setWeeklyMoodSummary] = useState<string | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+
+
   // Initialize auth state on component mount
   useEffect(() => {
     const initializeAuth = async () => {
@@ -147,6 +151,26 @@ const MoodBoardAI: React.FC = () => {
     }
   };
 
+  const loadWeeklySummary = async () => {
+    setIsLoadingSummary(true);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/moods/weekly-summary`, {
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setWeeklyMoodSummary(data.summary);
+      }
+    } catch (error) {
+      console.error('Failed to load weekly summary:', error);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  };
+
   const handleLogin = (user: User) => {
     setAuthState({
       isAuthenticated: true,
@@ -154,6 +178,7 @@ const MoodBoardAI: React.FC = () => {
       token: authService.getToken()
     });
     loadMoodHistory(); // Load history after login
+    loadWeeklySummary(); // Load weekly summary after login
   };
 
   const handleLogout = async () => {
@@ -586,6 +611,50 @@ const MoodBoardAI: React.FC = () => {
             
             {/* Right Column */}
             <div className="space-y-6">
+              {/* Weekly Summary - Only for authenticated users */}
+              <AnimatePresence>
+                {authState.isAuthenticated && showHistory && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6"
+                  >
+                    <GlassCard>
+                      <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-gray-800">
+                        <Sparkles className="text-yellow-500" size={22} />
+                        Your Week in One Sentence
+                        {isLoadingSummary && <LoadingSpinner size="sm" />}
+                      </h3>
+                      
+                      {weeklyMoodSummary ? (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="p-4 bg-gradient-to-r from-purple-100/80 to-pink-100/80 rounded-xl border border-purple-200"
+                        >
+                          <p className="text-lg text-gray-800 italic leading-relaxed">
+                            "{weeklyMoodSummary}"
+                          </p>
+                          <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
+                            <span>✨ AI-generated weekly insight</span>
+                            <button
+                              onClick={loadWeeklySummary}
+                              className="text-purple-600 hover:text-purple-800 font-medium"
+                            >
+                              Refresh
+                            </button>
+                          </div>
+                        </motion.div>
+                      ) : (
+                        <div className="p-4 bg-gray-100/80 rounded-xl text-center text-gray-600">
+                          <p>Journal your moods this week to see your personalized summary! 📝</p>
+                        </div>
+                      )}
+                    </GlassCard>
+                  </motion.div>
+                )}
+              </AnimatePresence>    
+
               {/* Mood History - Only for authenticated users */}
               <AnimatePresence>
                 {authState.isAuthenticated && showHistory && (

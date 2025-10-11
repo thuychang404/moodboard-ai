@@ -201,6 +201,49 @@ async def get_mood_stats(
     except Exception as e:
         print(f"Error calculating mood stats: {e}")
         raise HTTPException(status_code=500, detail="Failed to calculate mood statistics")
+    
+@router.get("/weekly-summary")
+async def get_weekly_summary(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    AUTHENTICATED: Generate AI summary of user's week in moods
+    """
+    try:
+        from datetime import timedelta
+        from app.services.summary_service import generate_weekly_summary
+        
+        # Get mood entries from the last 7 days
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        entries = db.query(MoodEntry)\
+            .filter(
+                MoodEntry.user_id == current_user.id,
+                MoodEntry.created_at >= seven_days_ago
+            )\
+            .order_by(MoodEntry.created_at.desc())\
+            .all()
+        
+        if not entries:
+            return {
+                "summary": "No mood entries this week. Start journaling to see your weekly insights!",
+                "entries_count": 0,
+                "period": "last 7 days"
+            }
+        
+        # Generate summary using LLM
+        summary = await generate_weekly_summary(entries)
+        
+        return {
+            "summary": summary,
+            "entries_count": len(entries),
+            "period": "last 7 days",
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    
+    except Exception as e:
+        print(f"Error generating weekly summary: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate weekly summary")
 
 @router.delete("/entry/{entry_id}")
 async def delete_mood_entry(
