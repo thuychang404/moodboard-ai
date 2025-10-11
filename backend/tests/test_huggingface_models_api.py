@@ -1,7 +1,7 @@
 # test_hf_working.py
 import requests
 
-token = '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'  # Your actual token
+token = 'my-token'  # Your actual token
 
 # List of FREE models to try (in order of reliability)
 models = [
