@@ -10,6 +10,8 @@ import { SpeechInput } from './components/SpeechInput';
 import { MusicPlayer, Playlist } from './components/MusicPlayer';  // ADD THIS LINE
 import AuthComponent from './components/AuthComponent';
 import confetti from 'canvas-confetti';
+import { generateAbstractArt, canvasToDataURL } from './services/artGenerator';  // ADD THIS LINE
+
 
 interface MoodEntry {
   id: number;
@@ -17,59 +19,6 @@ interface MoodEntry {
   analysis: MoodAnalysis;
   timestamp: string;
 }
-
-const generateAbstractArt = (canvas: HTMLCanvasElement, analysis: MoodAnalysis) => {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  
-  const width = canvas.width;
-  const height = canvas.height;
-  const { color_palette, art_style, energy_level } = analysis;
-  
-  ctx.clearRect(0, 0, width, height);
-  
-  // Create animated gradient background
-  const gradient = ctx.createRadialGradient(width/2, height/2, 0, width/2, height/2, Math.max(width, height)/2);
-  gradient.addColorStop(0, color_palette[0] + '40');
-  gradient.addColorStop(0.7, color_palette[1] + '20');
-  gradient.addColorStop(1, color_palette[2] + '10');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
-  
-  // Generate shapes based on mood
-  const shapeCount = energy_level === 'high' ? 20 : 12;
-  
-  for (let i = 0; i < shapeCount; i++) {
-    ctx.globalAlpha = Math.random() * 0.8 + 0.2;
-    ctx.fillStyle = color_palette[Math.floor(Math.random() * color_palette.length)];
-    
-    const x = Math.random() * width;
-    const y = Math.random() * height;
-    const size = Math.random() * 80 + 20;
-    
-    if (art_style === 'circles') {
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (art_style === 'sharp') {
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      for (let j = 0; j < 6; j++) {
-        const angle = (j / 6) * Math.PI * 2;
-        const radius = size + Math.random() * 40;
-        ctx.lineTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
-      }
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      ctx.beginPath();
-      ctx.ellipse(x, y, size, size * (0.4 + Math.random() * 0.4), Math.random() * Math.PI, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  
-  ctx.globalAlpha = 1;
-};
 
 const MoodBoardAI: React.FC = () => {
   // Authentication state
@@ -89,6 +38,8 @@ const MoodBoardAI: React.FC = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [saveToHistory, setSaveToHistory] = useState(false); // Toggle for saving
   const [includeMusic, setIncludeMusic] = useState(false); // ADD THIS LINE
+  const [includeImage, setIncludeImage] = useState(false); // ADD THIS LINE
+  const aiImageCanvasRef = useRef<HTMLCanvasElement>(null);  // ADD THIS LINE
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Personal features (authenticated only)
@@ -197,13 +148,6 @@ const MoodBoardAI: React.FC = () => {
   };
 
   const handleAnalyze = async () => {
-    console.log('🔍 DEBUG:', {
-      isAuthenticated: authState.isAuthenticated,
-      saveToHistory,
-      includeMusic,
-      willCallWithMusic: authState.isAuthenticated && includeMusic
-    });
-
     if (!entry.trim()) {
       setError('Please enter some text to analyze or use voice input');
       return;
@@ -217,7 +161,8 @@ const MoodBoardAI: React.FC = () => {
       const moodAnalysis = await moodService.analyzeMood(
         entry.trim(), 
         authState.isAuthenticated && saveToHistory,
-        authState.isAuthenticated && includeMusic  // This line MUST be here
+        authState.isAuthenticated && includeMusic,
+        authState.isAuthenticated && includeImage  // ADD THIS LINE
       );
 
         // ADD THESE DEBUG LINES:
@@ -226,6 +171,33 @@ const MoodBoardAI: React.FC = () => {
       console.log('🎵 Playlist tracks:', moodAnalysis.playlist?.tracks?.length || 0);
 
       setAnalysis(moodAnalysis);
+
+      // 🎨 Handle AI image fallback - generate canvas art if needed
+      // 🎨 Handle AI image fallback - generate canvas art if needed
+      if (moodAnalysis.ai_image?.use_canvas_fallback) {
+        console.log('🎨 Using canvas fallback for image generation');
+        setTimeout(() => {
+          if (aiImageCanvasRef.current) {
+            generateAbstractArt(aiImageCanvasRef.current, {
+              width: 1024,
+              height: 768,
+              colorPalette: moodAnalysis.color_palette,
+              artStyle: moodAnalysis.art_style,
+              energyLevel: moodAnalysis.energy_level
+            });
+            
+            // Convert canvas to data URL for display
+            const canvasDataURL = canvasToDataURL(aiImageCanvasRef.current);
+            setAnalysis(prev => prev ? {
+              ...prev,
+              ai_image: {
+                ...prev.ai_image!,
+                image_url: canvasDataURL
+              }
+            } : null);
+          }
+        }, 500);
+      }
 
       // For non-authenticated users or when not saving, store locally
       if (!authState.isAuthenticated || !saveToHistory) {
@@ -253,10 +225,16 @@ const MoodBoardAI: React.FC = () => {
         });
       }
 
-      // Generate art
+      // Generate art (existing canvas visualization)
       setTimeout(() => {
         if (canvasRef.current) {
-          generateAbstractArt(canvasRef.current, moodAnalysis);
+          generateAbstractArt(canvasRef.current, {
+            width: 400,
+            height: 300,
+            colorPalette: moodAnalysis.color_palette,
+            artStyle: moodAnalysis.art_style,
+            energyLevel: moodAnalysis.energy_level
+          });
         }
       }, 500);
 
@@ -272,6 +250,53 @@ const MoodBoardAI: React.FC = () => {
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  // ADD THIS ENTIRE COMPONENT:
+  const ImageGenerationIndicator: React.FC<{ analysis: MoodAnalysis }> = ({ analysis }) => {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="mb-4 p-4 bg-gradient-to-r from-indigo-100/90 to-purple-100/90 backdrop-blur-md border border-indigo-200 rounded-xl"
+      >
+        <div className="flex items-center gap-3 mb-3">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          >
+            <Sparkles className="text-indigo-600" size={24} />
+          </motion.div>
+          <div>
+            <div className="font-semibold text-indigo-900">Generating AI Artwork...</div>
+            <div className="text-sm text-indigo-700">Creating visuals from your mood analysis</div>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="flex items-center gap-2 bg-white/50 rounded-lg p-2">
+            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            <span className="text-gray-700">Sentiment: <strong className="capitalize">{analysis.sentiment}</strong></span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/50 rounded-lg p-2">
+            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+            <span className="text-gray-700">Energy: <strong className="capitalize">{analysis.energy_level}</strong></span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/50 rounded-lg p-2">
+            <div className="flex gap-1">
+              {analysis.color_palette.slice(0, 3).map((color, i) => (
+                <div key={i} className="w-3 h-3 rounded-full" style={{ backgroundColor: color }}></div>
+              ))}
+            </div>
+            <span className="text-gray-700">Color palette applied</span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/50 rounded-lg p-2">
+            <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+            <span className="text-gray-700">Style: <strong className="capitalize">{analysis.art_style}</strong></span>
+          </div>
+        </div>
+      </motion.div>
+    );
   };
 
   const downloadArtwork = () => {
@@ -496,6 +521,20 @@ const MoodBoardAI: React.FC = () => {
                         Generate personalized music playlist 🎵
                       </label>
                     </div>
+
+                    <div className="flex items-center gap-3 p-3 bg-indigo-50/80 rounded-xl">
+                      <input
+                        type="checkbox"
+                        id="includeImage"
+                        checked={includeImage}
+                        onChange={(e) => setIncludeImage(e.target.checked)}
+                        className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                      />
+                      <label htmlFor="includeImage" className="text-indigo-800 font-medium cursor-pointer flex items-center gap-2">
+                        <Palette size={16} />
+                        Generate AI mood artwork 🎨
+                      </label>
+                    </div>
                   </div>
                 )}
                 
@@ -611,6 +650,13 @@ const MoodBoardAI: React.FC = () => {
             
             {/* Right Column */}
             <div className="space-y-6">
+              {/* Image Generation Indicator */}
+              <AnimatePresence>
+                {isAnalyzing && includeImage && analysis && (
+                  <ImageGenerationIndicator analysis={analysis} />
+                )}
+              </AnimatePresence>
+
               {/* Weekly Summary - Only for authenticated users */}
               <AnimatePresence>
                 {authState.isAuthenticated && showHistory && (
@@ -809,6 +855,153 @@ const MoodBoardAI: React.FC = () => {
                 )}
               </AnimatePresence>
               
+              {/* AI Generated Image */}
+              <AnimatePresence>
+                {analysis?.ai_image && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.35 }}
+                  >
+                    <GlassCard>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xl font-semibold flex items-center gap-2 text-gray-800">
+                          <Sparkles className="text-yellow-500" size={22} />
+                          {analysis.ai_image.use_canvas_fallback ? 'Generated Mood Artwork' : 'AI-Generated Mood Image'}
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            analysis.ai_image.use_canvas_fallback 
+                              ? 'bg-purple-200 text-purple-800' 
+                              : 'bg-indigo-200 text-indigo-800'
+                          }`}>
+                            {analysis.ai_image.use_canvas_fallback ? 'Canvas Art' : analysis.ai_image.provider}
+                          </span>
+                        </h3>
+                        <motion.button
+                          onClick={() => {
+                            const link = document.createElement('a');
+                            link.download = `mood-art-${new Date().toISOString().split('T')[0]}.png`;
+                            link.href = analysis.ai_image!.image_url || '';
+                            link.click();
+                          }}
+                          className="p-2 bg-white/50 hover:bg-white/70 text-gray-700 hover:text-gray-900 rounded-lg transition-all duration-300 hover:shadow-md"
+                          title="Download artwork"
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                        >
+                          <Download size={18} />
+                        </motion.button>
+                      </div>
+                      
+                      {/* Color palette reference showing correlation */}
+                      <div className="mb-3 p-3 bg-gradient-to-r from-purple-50/80 to-pink-50/80 rounded-xl">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">
+                            🎨 Generated from your mood analysis:
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-600">Colors:</span>
+                            <div className="flex gap-1">
+                              {analysis.color_palette.slice(0, 5).map((color, idx) => (
+                                <div
+                                  key={idx}
+                                  className="w-4 h-4 rounded-full border-2 border-white shadow-sm"
+                                  style={{ backgroundColor: color }}
+                                  title={color}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-600">•</span>
+                            <span className="text-xs font-medium capitalize text-gray-700">
+                              {analysis.sentiment}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-600">•</span>
+                            <span className="text-xs font-medium capitalize text-gray-700">
+                              {analysis.energy_level} energy
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-600">•</span>
+                            <span className="text-xs font-medium capitalize text-gray-700">
+                              {analysis.art_style} style
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-600">•</span>
+                            <span className="text-xs font-medium capitalize text-gray-700">
+                              {analysis.music_mood} mood
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="relative rounded-xl overflow-hidden border-2 border-white/30 shadow-lg">
+                        {analysis.ai_image.use_canvas_fallback ? (
+                          <>
+                            {/* Hidden canvas for generation */}
+                            <canvas
+                              ref={aiImageCanvasRef}
+                              style={{ display: 'none' }}
+                            />
+                            {/* Display canvas as image */}
+                            {analysis.ai_image.image_url && (
+                              <img
+                                src={analysis.ai_image.image_url}
+                                alt="Canvas-generated mood artwork"
+                                className="w-full h-auto"
+                              />
+                            )}
+                          </>
+                        ) : (
+                          <img
+                            src={analysis.ai_image.image_url || ''}
+                            alt="AI-generated mood artwork"
+                            className="w-full h-auto"
+                          />
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent pointer-events-none" />
+                      </div>
+                      
+                      <div className="mt-3 space-y-2">
+                        {/* Image metadata */}
+                        <div className="text-sm text-gray-600 bg-white/30 rounded-lg p-3">
+                          {analysis.ai_image.use_canvas_fallback ? (
+                            <div>
+                              <div className="font-medium mb-1 text-purple-700">
+                                🎨 Procedurally Generated Art
+                              </div>
+                              <div className="italic text-gray-700">
+                                Created using your mood's color palette and energy patterns
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="font-medium mb-2 text-indigo-700">AI Generation Prompt:</div>
+                              <div className="text-xs italic text-gray-700 leading-relaxed">
+                                "{analysis.ai_image.prompt}"
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Show what influenced the image */}
+                        {!analysis.ai_image.use_canvas_fallback && analysis.keywords.length > 0 && (
+                          <div className="text-xs text-gray-600 bg-blue-50/50 rounded-lg p-2">
+                            <span className="font-medium">🔑 Influenced by themes:</span>{' '}
+                            {analysis.keywords.slice(0, 5).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </GlassCard>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Music Mood Visualization */}
               <AnimatePresence>
                 {analysis && analysis.playlist && (

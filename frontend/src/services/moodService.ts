@@ -29,6 +29,14 @@ export interface MoodAnalysis {
     sentiment?: string;
     energy?: string;
   };
+  ai_image?: {  // ADD THIS ENTIRE BLOCK
+    image_url: string | null;
+    provider: string;
+    prompt: string;
+    sentiment: string;
+    energy: string;
+    use_canvas_fallback?: boolean;
+  };
 }
 
 export interface MoodHistoryEntry {
@@ -69,7 +77,7 @@ class MoodService {
 
   // AUTHENTICATED: Analyze mood and save to user's history
   // AUTHENTICATED: Analyze mood and save to user's history
-  async analyzeMoodAndSave(text: string, includeMusic: boolean = false): Promise<MoodAnalysis> {  // ADD includeMusic parameter
+  async analyzeMoodAndSave(text: string, includeMusic: boolean = false, includeImage: boolean = false): Promise<MoodAnalysis> {  // ADD includeMusic parameter
     const token = localStorage.getItem('auth_token');
     if (!token) {
       throw new Error('Authentication required');
@@ -81,7 +89,7 @@ class MoodService {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ text, include_music: includeMusic }),  // ADD include_music to body
+      body: JSON.stringify({ text, include_music: includeMusic, include_image: includeImage }),  // ADD include_music, include_image to body
     });
     return this.handleResponse<MoodAnalysis>(response);
   }
@@ -133,11 +141,11 @@ class MoodService {
   }
 
   // Convenience method: Auto-choose public vs authenticated
-  async analyzeMood(text: string, saveToHistory: boolean = false, includeMusic: boolean = false): Promise<MoodAnalysis> {
+  async analyzeMood(text: string, saveToHistory: boolean = false, includeMusic: boolean = false, includeImage: boolean = false): Promise<MoodAnalysis> {
     const isAuthenticated = !!localStorage.getItem('auth_token');
     
-    if ((saveToHistory || includeMusic) && isAuthenticated) {
-      return this.analyzeMoodAndSave(text, includeMusic);  // PASS includeMusic
+    if ((saveToHistory || includeMusic || includeImage) && isAuthenticated) {
+      return this.analyzeMoodAndSave(text, includeMusic, includeImage);  // PASS includeMusic
     } else {
       return this.analyzeMoodPublic(text);
     }

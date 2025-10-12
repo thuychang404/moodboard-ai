@@ -9,12 +9,14 @@ from app.models.user import User
 from app.models.mood_entry import MoodEntry
 from app.api.auth import get_current_active_user
 from app.services.jamendo_service import jamendo_service  # ADD THIS LINE
+from app.services.image_service import image_service
 
 router = APIRouter()
 
 class MoodAnalysisRequest(BaseModel):
     text: str
     include_music: bool = False  # ADD THIS LINE
+    include_image: bool = False
 
 class MoodAnalysisResponse(BaseModel):
     sentiment: str
@@ -27,6 +29,7 @@ class MoodAnalysisResponse(BaseModel):
     music_mood: str
     ai_insight: str
     playlist: Optional[Dict[str, Any]] = None  # ADD THIS LINE
+    ai_image: Optional[Dict[str, Any]] = None
 
 class MoodEntryResponse(BaseModel):
     id: int
@@ -88,8 +91,24 @@ async def analyze_and_save_mood(
             playlist = jamendo_service.get_mood_playlist(analysis, limit=10)
             print(f"🎵 Playlist result: {playlist.get('total_tracks', 0) if playlist else 'None'} tracks")  # ADD THIS
             print(f"🎵 Playlist object: {playlist is not None}")  # ADD THIS        
-        # END OF NEW LINES
         
+        # 🎨 Generate AI image if requested
+        ai_image = None
+        if request.include_image:
+            print(f"🎨 Generating AI mood image for user {current_user.username}...")
+            print(f"📊 Analysis data: sentiment={analysis.get('sentiment')}, energy={analysis.get('energy_level')}, colors={len(analysis.get('color_palette', []))} colors")
+            
+            ai_image = await image_service.generate_mood_image(
+                mood_analysis=analysis,
+                provider="auto"
+            )
+            
+            if ai_image:
+                print(f"✅ AI image generated using {ai_image.get('provider')}")
+                print(f"🎨 Image prompt: {ai_image.get('prompt')[:100]}...")
+            else:
+                print("⚠️ AI image generation failed, continuing without image")
+
         # Save mood entry to database
         mood_entry = MoodEntry(
             user_id=current_user.id,
@@ -112,7 +131,7 @@ async def analyze_and_save_mood(
         print(f"✅ Mood entry saved for user {current_user.username} (ID: {mood_entry.id})")
         print(f"🎵 Returning playlist with response: {playlist is not None}")  # ADD THIS
 
-        return MoodAnalysisResponse(**analysis, playlist=playlist)  # RETURN PLAYLIST HERE IF GENERATED
+        return MoodAnalysisResponse(**analysis, playlist=playlist, ai_image=ai_image)  # RETURN PLAYLIST HERE IF GENERATED
     
     except Exception as e:
         print(f"Error in authenticated mood analysis: {e}")

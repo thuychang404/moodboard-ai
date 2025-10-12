@@ -154,7 +154,7 @@ class JamendoService:
                 "tags": ",".join(attempt_tags),
                 "limit": limit,
                 "order": "popularity_total",
-                "audioformat": "mp32",
+                "audioformat": "mp32", # Should not use mp31
                 "include": "musicinfo+licenses"
             }
 
